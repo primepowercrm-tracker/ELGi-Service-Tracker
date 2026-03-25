@@ -51,21 +51,26 @@ def to_excel(df):
     return output.getvalue()
 
 # ==============================
-# 📂 DATA LOADING (Auto-Load All Sheets)
+# 📂 DATA LOADING (Error-Safe)
 # ==============================
 @st.cache_data
 def load_all_data():
     f_list = os.listdir('.')
     def f(name): return next((x for x in f_list if name.lower() in x.lower() and x.endswith('.xlsx')), None)
     
-    m_df = pd.read_excel(f("Master_Data"), engine='openpyxl') if f("Master_Data") else pd.DataFrame()
-    m_od_df = pd.read_excel(f("Master_OD_Data"), engine='openpyxl') if f("Master_OD_Data") else pd.DataFrame()
-    foc_df = pd.read_excel(f("Active_FOC"), engine='openpyxl') if f("Active_FOC") else pd.DataFrame()
-    srv_df = pd.read_excel(f("Service_Details"), engine='openpyxl') if f("Service_Details") else pd.DataFrame()
-    
-    for d in [m_df, m_od_df, foc_df, srv_df]:
-        if not d.empty: d.columns = [str(c).strip() for c in d.columns]
-    return m_df, m_od_df, foc_df, srv_df
+    # Engine is set to openpyxl for cloud compatibility
+    try:
+        m_df = pd.read_excel(f("Master_Data"), engine='openpyxl') if f("Master_Data") else pd.DataFrame()
+        m_od_df = pd.read_excel(f("Master_OD_Data"), engine='openpyxl') if f("Master_OD_Data") else pd.DataFrame()
+        foc_df = pd.read_excel(f("Active_FOC"), engine='openpyxl') if f("Active_FOC") else pd.DataFrame()
+        srv_df = pd.read_excel(f("Service_Details"), engine='openpyxl') if f("Service_Details") else pd.DataFrame()
+        
+        for d in [m_df, m_od_df, foc_df, srv_df]:
+            if not d.empty: d.columns = [str(c).strip() for c in d.columns]
+        return m_df, m_od_df, foc_df, srv_df
+    except Exception as e:
+        st.error(f"Error loading Excel files: {e}. Ensure 'openpyxl' is in requirements.txt")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 master_df, master_od_df, foc_df, service_df = load_all_data()
 
@@ -83,38 +88,42 @@ if st.sidebar.button("Logout"):
 # 💎 MAIN TRACKER ENGINE
 # ==============================
 def run_tracker(df, name, key_suffix):
+    if df.empty:
+        st.warning(f"No data found for {name}. Please upload the Excel file.")
+        return
+
     st.title(f"🛠️ {name} Tracker Pro")
     
     overdue_col = find_col(df, ["over", "due"]) or find_col(df, ["red", "count"])
     crit = df[df[overdue_col] != 0] if overdue_col else pd.DataFrame()
-    
+    if not crit.empty:
+        st.error(f"⚠️ {len(crit)} Machines are OVERDUE!")
+
     t1, t2, t3 = st.tabs(["Machine Tracker", "📦 FOC List (Full)", "⏳ Service Pending (Full)"])
     
     with t1:
         colA, colB = st.columns(2)
         cust_col, fab_col = find_col(df, ["customer"]), find_col(df, ["fabrication"])
-        sel_c = colA.selectbox(f"Select Customer", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sc_{key_suffix}")
+        sel_c = colA.selectbox(f"Select Customer ({name})", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sc_{key_suffix}")
         df_filtered = df if sel_c == "All" else df[df[cust_col] == sel_c]
         sel_f = colB.selectbox(f"Select Fabrication Number", ["Select"] + sorted(df_filtered[fab_col].astype(str).unique()), key=f"sf_{key_suffix}")
 
         if sel_f != "Select":
             row = df_filtered[df_filtered[fab_col].astype(str) == sel_f].iloc[0]
             
-            # --- 📊 MACHINE INFO SECTION ---
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.info("📋 Machine Info")
                 st.write(f"**Cust:** {row[cust_col]}")
-                st.write(f"**Current HMR:** `{row.get('CURRENT HMR', 'N/A')}`")
+                st.write(f"**Current HMR:** `{row.get('CURRENT HMR', row.get('HMR Cal.', 'N/A'))}`")
                 st.write(f"**MDA Total Hours (DU):** `{row.get('MDA Total Hours', 'N/A')}`")
                 st.write(f"**Last Service Date:** {fmt(row.get(find_col(df, ['last', 'call', 'date'])))}")
                 st.download_button("📄 Download This Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
-            # --- 🔧 PARTS MAPPING ---
             pm = {"OIL":["oil","r","date"],"AF":["af","r","date"],"OF":["of","r","date"],"AOS":["aos","r","date"],"RGT":["rgt","r","date"],"VK":["valvekit","r","date"]} if name=="INDUSTRIAL" else {"OIL":["oil","repl"],"AFC":["afc","repl"],"AFE":["afe","repl"],"MOF":["mof","repl"],"ROF":["rof","repl"],"AOS":["aos","repl"]}
 
             with m2:
-                st.info("🔧 History (Dates)")
+                st.info("🔧 History (R Date)")
                 for lbl, ks in pm.items():
                     c = next((x for x in df.columns if all(k in x.lower() for k in ks)), None)
                     st.write(f"**{lbl}:** {fmt(row.get(c))}")
@@ -134,35 +143,31 @@ def run_tracker(df, name, key_suffix):
             # --- 🎁 DEEP LINK: MACHINE FOC & HISTORY ---
             st.divider()
             col_foc, col_srv = st.columns(2)
-            
             with col_foc:
-                st.subheader(f"🎁 FOC Details for {sel_f}")
+                st.subheader(f"🎁 Machine FOC: {sel_f}")
                 f_fab_col = find_col(foc_df, ["fabrication"])
-                if f_fab_col:
-                    m_foc = foc_df[foc_df[f_fab_col].astype(str) == sel_f]
-                    if not m_foc.empty: st.dataframe(m_foc, use_container_width=True)
-                    else: st.warning("No FOC items found for this machine.")
-                
+                m_foc = foc_df[foc_df[f_fab_col].astype(str) == sel_f] if f_fab_col else pd.DataFrame()
+                if not m_foc.empty: st.dataframe(m_foc, use_container_width=True)
+                else: st.warning("No FOC items found.")
             with col_srv:
-                st.subheader(f"🕒 Service History for {sel_f}")
+                st.subheader(f"🕒 Service History: {sel_f}")
                 s_fab_col = find_col(service_df, ["fabrication"])
-                if s_fab_col:
-                    m_srv = service_df[service_df[s_fab_col].astype(str) == sel_f]
-                    if not m_srv.empty: st.dataframe(m_srv.sort_values(by=m_srv.columns[0], ascending=False), use_container_width=True)
-                    else: st.warning("No service history recorded for this machine.")
+                m_srv = service_df[service_df[s_fab_col].astype(str) == sel_f] if s_fab_col else pd.DataFrame()
+                if not m_srv.empty: st.dataframe(m_srv.sort_values(by=m_srv.columns[0], ascending=False), use_container_width=True)
+                else: st.warning("No history found.")
 
     with t2:
-        st.subheader(f"📦 {name} All Active FOC List")
+        st.subheader(f"📦 {name} All FOC List")
         f_fab_col = find_col(foc_df, ["fabrication"])
         if f_fab_col:
             f_display = foc_df[foc_df[f_fab_col].astype(str).isin(df[fab_col].astype(str))]
-            st.download_button(f"📥 Export Full FOC List", to_excel(f_display), f"{name}_FOC.xlsx", key=f"fex_{key_suffix}")
+            st.download_button(f"📥 Export Full FOC", to_excel(f_display), f"{name}_FOC.xlsx", key=f"fex_{key_suffix}")
             st.dataframe(f_display, use_container_width=True)
 
     with t3:
-        st.subheader(f"⏳ {name} All Service Pending")
+        st.subheader(f"⏳ {name} Service Overdue")
         if not crit.empty:
-            st.download_button(f"📥 Export Pending List", to_excel(crit), f"{name}_Pending.xlsx", key=f"pex_{key_suffix}")
+            st.download_button(f"📥 Export Overdue", to_excel(crit), f"{name}_Pending.xlsx", key=f"pex_{key_suffix}")
             st.dataframe(crit, use_container_width=True)
         else: st.success("Zero Pending Service!")
 
@@ -171,6 +176,6 @@ if nav == "DPSAC Tracker": run_tracker(master_df, "DPSAC", "DP")
 elif nav == "INDUSTRIAL Tracker": run_tracker(master_od_df, "INDUSTRIAL", "IN")
 elif nav == "📢 Automation Center":
     st.title("📢 Automation Center")
-    msg = st.text_area("Message:", "Alert: Service is overdue for several ELGi machines.")
+    msg = st.text_area("Broadcast Message:", "Report: ELGi Service Overdue Alert.")
     wa_link = f"https://wa.me/917061158953?text={urllib.parse.quote(msg)}"
-    st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border-radius:5px; border:none; width:100%; cursor:pointer;">📱 Send WhatsApp Alert to Admin</button></a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border:none; border-radius:5px; width:100%; cursor:pointer;">📱 Send WhatsApp Alert</button></a>', unsafe_allow_html=True)
