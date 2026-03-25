@@ -39,6 +39,11 @@ def fmt(dt):
         return val.strftime('%d-%b-%y') if val.year > 1970 else "N/A"
     except: return "N/A"
 
+def find_col(df, keywords):
+    for c in df.columns:
+        if all(k.lower() in str(c).lower() for k in keywords): return c
+    return None
+
 def to_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -58,7 +63,6 @@ def load_all_data():
         foc_df = pd.read_excel(f("Active_FOC"), engine='openpyxl') if f("Active_FOC") else pd.DataFrame()
         srv_df = pd.read_excel(f("Service_Details"), engine='openpyxl') if f("Service_Details") else pd.DataFrame()
         
-        # Cleanup column names
         for d in [m_df, m_od_df, foc_df, srv_df]:
             if not d.empty: d.columns = [str(c).strip() for c in d.columns]
         return m_df, m_od_df, foc_df, srv_df
@@ -77,37 +81,39 @@ if st.sidebar.button("Logout"):
     st.session_state["login"] = False; st.rerun()
 
 # ==============================
-# 💎 TRACKER ENGINE (Dual Lookup Mode)
+# 💎 TRACKER ENGINE
 # ==============================
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
     
-    # Common columns
-    cust_col = next((c for c in df.columns if "customer" in c.lower()), df.columns[0])
-    fab_col = next((c for c in df.columns if "fabrication" in c.lower()), df.columns[1])
+    cust_col = find_col(df, ["customer"])
+    fab_col = find_col(df, ["fabrication"])
 
     t1, t2, t3 = st.tabs(["Machine Tracker", "📦 FOC List", "⏳ Service Pending"])
     
     with t1:
         colA, colB = st.columns(2)
-        sel_c = colA.selectbox(f"Select Customer ({name})", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sc_{key_suffix}")
+        sel_c = colA.selectbox(f"Select Customer", ["All"] + sorted(df[cust_col].astype(str).unique()), key=f"sc_{key_suffix}")
         df_f = df if sel_c == "All" else df[df[cust_col] == sel_c]
         sel_f = colB.selectbox(f"Select Fabrication Number", ["Select"] + sorted(df_f[fab_col].astype(str).unique()), key=f"sf_{key_suffix}")
 
         if sel_f != "Select":
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
             
-            # --- 📊 DYNAMIC INFO BOX (MAPPING PER TRACKER) ---
+            # --- 📊 DYNAMIC INFO BOX ---
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.info("📋 Machine Info")
                 if name == "DPSAC":
-                    # Lookup for DPSAC as per your instructions
-                    avg_run = row.get("Average Running Hours", "N/A") # Column AF
-                    curr_h = row.get("Current Hours", 0) # Column AG
-                    total_h = row.get("Total Hours", 0) # Column DN
+                    # --- FIXED MAPPING FOR DPSAC ---
+                    avg_run = row.get("Average Running Hours", "N/A") 
+                    # Mapping Column AG (Current Hours) and Column DN (Total Hours)
+                    curr_h = row.get("Current Hours", row.get("Current HMR", 0))
+                    total_h = row.get("Total Hours", row.get("MDA Total Hours", 0))
+                    # Mapping Column R (Last Call Date / Last Service Date)
+                    last_srv_date = row.get("Last Call Date", row.get("Last Service Date", "N/A"))
+                    
                     diff_h = float(curr_h) - float(total_h) if (pd.notna(curr_h) and pd.notna(total_h)) else "N/A"
-                    last_srv_date = row.get("Last Call Date", "N/A") # Column R (Mapped to your sheet header)
                     
                     st.write(f"**Cust:** {row[cust_col]}")
                     st.write(f"**Avg Running/Day:** {avg_run} 🏃")
@@ -116,21 +122,19 @@ def run_tracker(df, name, key_suffix):
                     st.write(f"**Difference HMR:** `{diff_h}` ⚖️")
                     st.write(f"**Last Service Date (R):** {fmt(last_srv_date)} 📅")
                 else:
-                    # INDUSTRIAL LOOKUP (Keep as it is)
+                    # INDUSTRIAL LOOKUP
                     st.write(f"**Cust:** {row[cust_col]}")
-                    st.write(f"**Avg Running/Day:** {row.get('Avg. Running', 'N/A')} 🏃")
-                    st.write(f"**Current HMR (BL):** `{row.get('CURRENT HMR', 'N/A')}` 📟")
-                    st.write(f"**Load HMR (BM):** `{row.get('CURRENT LOAD HMR', 'N/A')}` 🏗️")
-                    st.write(f"**Difference HMR (BO):** `{row.get('DIFFRENT HMR', 'N/A')}` ⚖️")
-                    st.write(f"**MDA Total Hours (DU):** `{row.get('MDA Total Hours', 'N/A')}` 📊")
-                    st.write(f"**Last Service Date:** {fmt(row.get('Last Call Date'))} 📅")
+                    st.write(f"**Avg Running/Day:** {row.get('Avg. Running', 'N/A')}")
+                    st.write(f"**Current HMR:** `{row.get('CURRENT HMR', 'N/A')}`")
+                    st.write(f"**MDA Total Hours:** `{row.get('MDA Total Hours', 'N/A')}`")
+                    st.write(f"**Last Service Date:** {fmt(row.get('Last Call Date'))}")
 
                 st.download_button("📄 Download Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
-            # --- 🔧 9 PARTS DUAL MAPPING ---
+            # --- 🔧 9 PARTS LOOKUP ---
             if name == "INDUSTRIAL":
-                pm = {"OIL":["oil","r","date"],"AF":["af","r","date"],"OF":["of","r","date"],"AOS":["aos","r","date"],"RGT":["rgt","r","date"],"VK":["valvekit","r","date"],"PF":["pf","due"],"FF":["ff","due"],"CF":["cf","due"]}
-            else: # DPSAC Tracker (Standard Keywords)
+                pm = {"OIL":["oil","r","date"],"AF":["af","r","date"],"OF":["of","r","date"],"AOS":["aos","r","date"],"RGT":["rgt","r","date"],"VK":["vk","r","date"]}
+            else:
                 pm = {"OIL":["oil","repl"],"AFC":["afc","repl"],"AFE":["afe","repl"],"MOF":["mof","repl"],"ROF":["rof","repl"],"AOS":["aos","repl"],"RGT":["rgt","repl"],"1500":["1500","repl"],"3000":["3000","repl"]}
 
             with m2:
@@ -146,30 +150,28 @@ def run_tracker(df, name, key_suffix):
                     icon = '🟢' if pd.notna(val) and str(val).replace('.','').replace('-','').isdigit() and float(val)>100 else '🔴'
                     st.write(f"**{lbl}:** {icon} {val}")
             with m4:
-                st.error("🚨 Next Due (Date)")
+                st.error("🚨 Next Due")
                 for lbl, ks in pm.items():
                     dc = next((x for x in df.columns if lbl.lower() in x.lower() and "due" in x.lower() and "date" in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(dc))}")
 
-            # Deep Link: FOC & History
+            # --- 🎁 FOC & SERVICE HISTORY ---
             st.divider()
             c_foc, c_srv = st.columns(2)
             with c_foc:
-                st.subheader(f"🎁 FOC Details: {sel_f}")
-                m_foc = foc_df[foc_df[next((c for c in foc_df.columns if "fabrication" in c.lower()), foc_df.columns[0])].astype(str) == sel_f] if not foc_df.empty else pd.DataFrame()
-                if not m_foc.empty: st.dataframe(m_foc, use_container_width=True)
-                else: st.warning("No FOC found.")
+                st.subheader(f"🎁 Machine FOC: {sel_f}")
+                m_foc = foc_df[foc_df[find_col(foc_df, ["fabrication"])].astype(str) == sel_f] if not foc_df.empty else pd.DataFrame()
+                st.dataframe(m_foc, use_container_width=True)
             with c_srv:
                 st.subheader(f"🕒 Service History: {sel_f}")
-                m_srv = service_df[service_df[next((c for c in service_df.columns if "fabrication" in c.lower()), service_df.columns[0])].astype(str) == sel_f] if not service_df.empty else pd.DataFrame()
-                if not m_srv.empty: st.dataframe(m_srv.sort_values(by=m_srv.columns[0], ascending=False), use_container_width=True)
-                else: st.warning("No history found.")
+                m_srv = service_df[service_df[find_col(service_df, ["fabrication"])].astype(str) == sel_f] if not service_df.empty else pd.DataFrame()
+                st.dataframe(m_srv.sort_values(by=m_srv.columns[0], ascending=False), use_container_width=True)
 
 # --- EXECUTION ---
 if nav == "DPSAC Tracker": run_tracker(master_df, "DPSAC", "DP")
 elif nav == "INDUSTRIAL Tracker": run_tracker(master_od_df, "INDUSTRIAL", "IN")
 elif nav == "📢 Automation Center":
     st.title("📢 Automation Center")
-    msg = st.text_area("Message:", "ELGi Service Alert: Critical overdue status. Please check the dashboard.")
+    msg = st.text_area("Message:", "ELGi Service Alert triggered.")
     wa_link = f"https://wa.me/917061158953?text={urllib.parse.quote(msg)}"
-    st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border:none; border-radius:5px; cursor:pointer; width:100%;">📱 Send WhatsApp Broadcast</button></a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border:none; border-radius:5px; width:100%; cursor:pointer;">Send WhatsApp</button></a>', unsafe_allow_html=True)
