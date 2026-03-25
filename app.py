@@ -80,7 +80,7 @@ if st.sidebar.button("Logout"):
     st.session_state["login"] = False; st.rerun()
 
 # ==============================
-# 💎 TRACKER MAIN
+# 💎 MAIN TRACKER ENGINE
 # ==============================
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
@@ -114,12 +114,12 @@ def run_tracker(df, name, key_suffix):
         if sel_f != "Select":
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
             
-            # --- 📊 DYNAMIC INFO BOX ---
+            # --- 📊 MACHINE INFO BOX ---
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.info("📋 Machine Info")
                 if name == "DPSAC":
-                    curr_h = row.get("Current Hours", row.get("HMT Cal.", 0))
+                    curr_h = row.get("Current Hours", row.get("Current HMR", 0))
                     total_h = row.get("Total Hours", row.get("MDA Total Hours", 0))
                     st.write(f"**Cust:** {row[cust_col]}")
                     st.write(f"**Avg Running:** {row.get('Average Running Hours', 'N/A')} 🏃")
@@ -131,8 +131,6 @@ def run_tracker(df, name, key_suffix):
                     st.write(f"**Cust:** {row[cust_col]}")
                     st.write(f"**Current HMR:** `{row.get('CURRENT HMR', 'N/A')}`")
                     st.write(f"**Total HMR:** `{row.get('MDA Total Hours', 'N/A')}`")
-                    st.write(f"**Difference:** `{diff_h}` ⚖️")
-                    st.write(f"**Last Service Date (R):** {fmt(last_srv_date)} 📅")
                 st.download_button("📄 Download This Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
             # --- 🔧 9 PARTS LOOKUP ---
