@@ -100,7 +100,6 @@ def run_tracker(df, name, key_suffix):
         if sel_f != "Select":
             row = df_f[df_f[fab_col].astype(str) == sel_f].iloc[0]
             
-            # --- 📊 CUSTOMER INFO SECTION (As per Screenshot) ---
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.info("📋 Machine Info")
@@ -114,16 +113,14 @@ def run_tracker(df, name, key_suffix):
                 st.write(f"**Last Service Date:** {fmt(row.get(find_col(df, ['last', 'call', 'date'])))} 📅")
                 st.download_button("📄 Download Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
-            # --- 🔧 FULL 9 PARTS MAPPING (DPSAC & INDUSTRIAL) ---
+            # --- 🔧 UPDATED 9 PARTS LOOKUP (Strict Keyword Match) ---
             if name == "INDUSTRIAL":
-                # Industrial Keywords: R Date, Rem HMR, Due Date
                 pm = {
                     "OIL": ["oil"], "AF": ["af"], "OF": ["of"], 
-                    "AOS": ["aos"], "RGT": ["rgt"], "VK": ["valvekit", "vk"],
+                    "AOS": ["aos"], "RGT": ["rgt"], "VK": ["vk", "valvekit"],
                     "PF": ["pf"], "FF": ["ff"], "CF": ["cf"]
                 }
             else:
-                # DPSAC Keywords: Repl, Rem, Due
                 pm = {
                     "OIL": ["oil"], "AFC": ["afc"], "AFE": ["afe"], 
                     "MOF": ["mof"], "ROF": ["rof"], "AOS": ["aos"],
@@ -138,7 +135,8 @@ def run_tracker(df, name, key_suffix):
             with m3:
                 st.info("⏳ Remaining (HMR)")
                 for lbl, ks in pm.items():
-                    rc = next((x for x in df.columns if all(k in x.lower() for k in ks) and ("rem" in x.lower() or "remaining" in x.lower())), None)
+                    # Strict lookup for "Remaining HMR Till Date" or similar
+                    rc = next((x for x in df.columns if all(k in x.lower() for k in ks) and "rem" in x.lower()), None)
                     val = row.get(rc, "N/A")
                     icon = '🟢' if pd.notna(val) and str(val).replace('.','').replace('-','').isdigit() and float(val)>100 else '🔴'
                     st.write(f"**{lbl}:** {icon} {val}")
@@ -162,28 +160,28 @@ def run_tracker(df, name, key_suffix):
                 s_fab_col = find_col(service_df, ["fabrication"])
                 m_srv = service_df[service_df[s_fab_col].astype(str) == sel_f] if s_fab_col else pd.DataFrame()
                 if not m_srv.empty: st.dataframe(m_srv.sort_values(by=m_srv.columns[0], ascending=False), use_container_width=True)
-                else: st.warning("No service history recorded.")
+                else: st.warning("No service history found.")
 
     with t2:
         st.subheader(f"📦 {name} All FOC List")
         f_fab_col = find_col(foc_df, ["fabrication"])
         if f_fab_col:
             f_display = foc_df[foc_df[f_fab_col].astype(str).isin(df[fab_col].astype(str))]
-            st.download_button(f"📥 Export Full FOC List", to_excel(f_display), f"{name}_FOC.xlsx", key=f"fex_{key_suffix}")
+            st.download_button(f"📥 Export Full FOC", to_excel(f_display), f"{name}_FOC.xlsx", key=f"fex_{key_suffix}")
             st.dataframe(f_display, use_container_width=True)
 
     with t3:
         st.subheader(f"⏳ {name} Service Overdue")
         if not crit.empty:
-            st.download_button(f"📥 Export Overdue List", to_excel(crit), f"{name}_Pending.xlsx", key=f"pex_{key_suffix}")
+            st.download_button(f"📥 Export Overdue", to_excel(crit), f"{name}_Pending.xlsx", key=f"pex_{key_suffix}")
             st.dataframe(crit, use_container_width=True)
-        else: st.success("No service pending!")
+        else: st.success("Zero Pending Service!")
 
 # --- EXECUTION ---
 if nav == "DPSAC Tracker": run_tracker(master_df, "DPSAC", "DP")
 elif nav == "INDUSTRIAL Tracker": run_tracker(master_od_df, "INDUSTRIAL", "IN")
 elif nav == "📢 Automation Center":
     st.title("📢 Automation Center")
-    msg = st.text_area("Broadcast Message:", "Report Update: Please check the dashboard for critical service overdue status.")
+    msg = st.text_area("Broadcast Message:", "Report: ELGi Service Overdue Alert.")
     wa_link = f"https://wa.me/917061158953?text={urllib.parse.quote(msg)}"
     st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border:none; border-radius:5px; width:100%; cursor:pointer;">📱 Send WhatsApp Alert</button></a>', unsafe_allow_html=True)
