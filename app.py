@@ -128,7 +128,8 @@ def run_tracker(df, name, key_suffix):
             
             # --- 🔧 9 PARTS LOOKUP ---
             if name == "INDUSTRIAL":
-                pm = {"OIL":["oil","r date"],"AF":["af","r date"],"OF":["of","r date"],"AOS":["aos","r date"],"RGT":["rgt","r date"],"VK":["vk","r date"],"PF":["pf","due"],"FF":["ff","due"],"CF":["cf","due"]}
+                pm = {"OIL":["oil","r","date"],"AF":["af","r","date"],"OF":["of","r","date"],"AOS":["aos","r","date"],"RGT":["rgt","r","date"],"VK":["valvekit","r","date"],"PF":["pf","due"],"FF":["ff","due"],"CF":["cf","due"]}
+
             else:
                 pm = {"OIL":["oil","repl"],"AFC":["afc","repl"],"AFE":["afe","repl"],"MOF":["mof","repl"],"ROF":["rof","repl"],"AOS":["aos","repl"],"RGT":["rgt","repl"],"1500":["1500","repl"],"3000":["3000","repl"]}
 
