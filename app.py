@@ -108,7 +108,7 @@ def run_tracker(df, name, key_suffix):
                     # --- FIXED MAPPING FOR DPSAC ---
                     avg_run = row.get("Average Running Hours", "N/A") 
                     # Mapping Column AG (Current Hours) and Column DN (Total Hours)
-                    curr_h = row.get("Current Hours", row.get("Current HMR", 0))
+                    curr_h = row.get("Current Hours", row.get("HMR Cal.", 0))
                     total_h = row.get("Total Hours", row.get("MDA Total Hours", 0))
                     # Mapping Column R (Last Call Date / Last Service Date)
                     last_srv_date = row.get("Last Call Date", row.get("Last Service Date", "N/A"))
