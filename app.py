@@ -122,7 +122,6 @@ def run_tracker(df, name, key_suffix):
                     curr_h = row.get("Current Hours", row.get("Current HMR", 0))
                     total_h = row.get("Total Hours", row.get("MDA Total Hours", 0))
                     st.write(f"**Cust:** {row[cust_col]}")
-                    st.write(f"**Model:** {row.get(find_col(df,'model'))}")
                     st.write(f"**Avg Running:** {row.get('Average Running Hours', 'N/A')} 🏃")
                     st.write(f"**Current (AG):** `{curr_h}` 📟")
                     st.write(f"**Total (DN):** `{total_h}` 📊")
@@ -135,8 +134,7 @@ def run_tracker(df, name, key_suffix):
                 st.download_button("📄 Download This Report", to_excel(pd.DataFrame([row])), f"Report_{sel_f}.xlsx", key=f"ex_{sel_f}")
             
             # --- 🔧 9 PARTS LOOKUP ---
-            if name == "INDUSTRIAL":
-                pm = {"OIL":["oil","r","date"],"AF":["af","r","date"],"OF":["of","r","date"],"AOS":["aos","r","date"],"RGT":["rgt","r","date"],"VK":["valvekit","r","date"],"PF":["pf","due"],"FF":["ff","due"],"CF":["cf","due"]}
+            pm = {"OIL":["oil"],"AF":["af"],"OF":["of"],"AOS":["aos"],"RGT":["rgt"],"VK":["vk"]} if name=="INDUSTRIAL" else {"OIL":["oil"],"AFC":["afc"],"AFE":["afe"],"MOF":["mof"],"ROF":["rof"],"AOS":["aos"],"RGT":["rgt"],"1500":["1500"],"3000":["3000"]}
 
             with m2:
                 st.info("🔧 History (R Date)")
