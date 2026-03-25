@@ -62,7 +62,6 @@ def load_all_data():
         m_od_df = pd.read_excel(f("Master_OD_Data"), engine='openpyxl') if f("Master_OD_Data") else pd.DataFrame()
         foc_df = pd.read_excel(f("Active_FOC"), engine='openpyxl') if f("Active_FOC") else pd.DataFrame()
         srv_df = pd.read_excel(f("Service_Details"), engine='openpyxl') if f("Service_Details") else pd.DataFrame()
-        
         for d in [m_df, m_od_df, foc_df, srv_df]:
             if not d.empty: d.columns = [str(c).strip() for c in d.columns]
         return m_df, m_od_df, foc_df, srv_df
@@ -71,7 +70,7 @@ def load_all_data():
 master_df, master_od_df, foc_df, service_df = load_all_data()
 
 # ==============================
-# 🏢 NAVIGATION
+# 🏢 NAVIGATION & SIDEBAR
 # ==============================
 role = st.session_state["role"]
 st.sidebar.title(f"👋 {st.session_state['user'].upper()}")
@@ -105,15 +104,12 @@ def run_tracker(df, name, key_suffix):
             with m1:
                 st.info("📋 Machine Info")
                 if name == "DPSAC":
-                    # --- FIXED MAPPING FOR DPSAC ---
+                    # Mapping Column AF, AG, DN, R
                     avg_run = row.get("Average Running Hours", "N/A") 
-                    # Mapping Column AG (Current Hours) and Column DN (Total Hours)
-                    curr_h = row.get("Current Hours", row.get("HMR Cal.", 0))
-                    total_h = row.get("Total Hours", row.get("MDA Total Hours", 0))
-                    # Mapping Column R (Last Call Date / Last Service Date)
-                    last_srv_date = row.get("Last Call Date", row.get("Last Service Date", "N/A"))
-                    
+                    curr_h = row.get("HMR Cal.", 0)
+                    total_h = row.get("Total Hours", 0)
                     diff_h = float(curr_h) - float(total_h) if (pd.notna(curr_h) and pd.notna(total_h)) else "N/A"
+                    last_srv_date = row.get("Last Call Date", "N/A")
                     
                     st.write(f"**Cust:** {row[cust_col]}")
                     st.write(f"**Avg Running/Day:** {avg_run} 🏃")
@@ -124,7 +120,6 @@ def run_tracker(df, name, key_suffix):
                 else:
                     # INDUSTRIAL LOOKUP
                     st.write(f"**Cust:** {row[cust_col]}")
-                    st.write(f"**Avg Running/Day:** {row.get('Avg. Running', 'N/A')}")
                     st.write(f"**Current HMR:** `{row.get('CURRENT HMR', 'N/A')}`")
                     st.write(f"**MDA Total Hours:** `{row.get('MDA Total Hours', 'N/A')}`")
                     st.write(f"**Last Service Date:** {fmt(row.get('Last Call Date'))}")
@@ -133,7 +128,7 @@ def run_tracker(df, name, key_suffix):
             
             # --- 🔧 9 PARTS LOOKUP ---
             if name == "INDUSTRIAL":
-                pm = {"OIL":["oil","r","date"],"AF":["af","r","date"],"OF":["of","r","date"],"AOS":["aos","r","date"],"RGT":["rgt","r","date"],"VK":["vk","r","date"]}
+                pm = {"OIL":["oil","r date"],"AF":["af","r date"],"OF":["of","r date"],"AOS":["aos","r date"],"RGT":["rgt","r date"],"VK":["vk","r date"],"PF":["pf","due"],"FF":["ff","due"],"CF":["cf","due"]}
             else:
                 pm = {"OIL":["oil","repl"],"AFC":["afc","repl"],"AFE":["afe","repl"],"MOF":["mof","repl"],"ROF":["rof","repl"],"AOS":["aos","repl"],"RGT":["rgt","repl"],"1500":["1500","repl"],"3000":["3000","repl"]}
 
@@ -141,11 +136,12 @@ def run_tracker(df, name, key_suffix):
                 st.info("🔧 History (R Date)")
                 for lbl, ks in pm.items():
                     c = next((x for x in df.columns if all(k in x.lower() for k in ks)), None)
+                    if not c: c = next((x for x in df.columns if lbl.lower() in x.lower() and "date" in x.lower() and "due" not in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(c))}")
             with m3:
                 st.info("⏳ Remaining (HMR)")
                 for lbl, ks in pm.items():
-                    rc = next((x for x in df.columns if ks[0] in x.lower() and "rem" in x.lower()), None)
+                    rc = next((x for x in df.columns if lbl.lower() in x.lower() and ("rem" in x.lower() or "remaining" in x.lower())), None)
                     val = row.get(rc, "N/A")
                     icon = '🟢' if pd.notna(val) and str(val).replace('.','').replace('-','').isdigit() and float(val)>100 else '🔴'
                     st.write(f"**{lbl}:** {icon} {val}")
@@ -155,23 +151,25 @@ def run_tracker(df, name, key_suffix):
                     dc = next((x for x in df.columns if lbl.lower() in x.lower() and "due" in x.lower() and "date" in x.lower()), None)
                     st.write(f"**{lbl}:** {fmt(row.get(dc))}")
 
-            # --- 🎁 FOC & SERVICE HISTORY ---
+            # --- 🎁 DEEP LINK: MACHINE FOC & HISTORY ---
             st.divider()
             c_foc, c_srv = st.columns(2)
             with c_foc:
                 st.subheader(f"🎁 Machine FOC: {sel_f}")
                 m_foc = foc_df[foc_df[find_col(foc_df, ["fabrication"])].astype(str) == sel_f] if not foc_df.empty else pd.DataFrame()
-                st.dataframe(m_foc, use_container_width=True)
+                if not m_foc.empty: st.dataframe(m_foc, use_container_width=True)
+                else: st.warning("No FOC entries found.")
             with c_srv:
                 st.subheader(f"🕒 Service History: {sel_f}")
                 m_srv = service_df[service_df[find_col(service_df, ["fabrication"])].astype(str) == sel_f] if not service_df.empty else pd.DataFrame()
-                st.dataframe(m_srv.sort_values(by=m_srv.columns[0], ascending=False), use_container_width=True)
+                if not m_srv.empty: st.dataframe(m_srv.sort_values(by=m_srv.columns[0], ascending=False), use_container_width=True)
+                else: st.warning("No history recorded.")
 
 # --- EXECUTION ---
 if nav == "DPSAC Tracker": run_tracker(master_df, "DPSAC", "DP")
 elif nav == "INDUSTRIAL Tracker": run_tracker(master_od_df, "INDUSTRIAL", "IN")
 elif nav == "📢 Automation Center":
     st.title("📢 Automation Center")
-    msg = st.text_area("Message:", "ELGi Service Alert triggered.")
+    msg = st.text_area("Message:", "ELGi Service Update Required.")
     wa_link = f"https://wa.me/917061158953?text={urllib.parse.quote(msg)}"
-    st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border:none; border-radius:5px; width:100%; cursor:pointer;">Send WhatsApp</button></a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background-color:#25D366; color:white; padding:10px; border:none; border-radius:5px; width:100%; cursor:pointer;">Send WhatsApp Alert</button></a>', unsafe_allow_html=True)
