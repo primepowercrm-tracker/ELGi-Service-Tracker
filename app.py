@@ -84,18 +84,6 @@ if st.sidebar.button("Logout"):
 # ==============================
 def run_tracker(df, name, key_suffix):
     st.title(f"🛠️ {name} Tracker Pro")
-
-    # 📊 GRAPHS SECTION
-    with st.expander("📊 Click to View Dashboard Analytics & Graphs", expanded=False):
-        c1, c2 = st.columns(2)
-        sc = find_col(df, ["unit", "status"])
-        if sc: 
-            c1.subheader("Unit Status Distribution")
-            c1.bar_chart(df[sc].value_counts())
-        cc = find_col(df, ["category"])
-        if cc: 
-            c2.subheader("Category Breakdown")
-            c2.pie_chart(df[cc].value_counts())
             
     cust_col = find_col(df, ["customer"])
     fab_col = find_col(df, ["fabrication"])
