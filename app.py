@@ -122,7 +122,7 @@ def run_tracker(df, name, key_suffix):
                     curr_h = row.get("Current Hours", row.get("Current HMR", 0))
                     total_h = row.get("Total Hours", row.get("MDA Total Hours", 0))
                     st.write(f"**Cust:** {row[cust_col]}")
-                     st.write(f"Model: {row.get(find_col(df,'model'))}")
+                    st.write(f"Model:** {row.get(find_col(df,'model'))}")
                     st.write(f"**Avg Running:** {row.get('Average Running Hours', 'N/A')} 🏃")
                     st.write(f"**Current (AG):** `{curr_h}` 📟")
                     st.write(f"**Total (DN):** `{total_h}` 📊")
